@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from datetime import datetime
 import sysconfig
@@ -147,7 +148,7 @@ class Tortus:
         rules = HTML(
             'Click on the label corresponding with the text below. Each selection requires \
                 confirmation before proceeding to the next item.')
-        annotation_text = self.subset_df.iloc[self.annotation_index, -1]
+        annotation_text = self.subset_df.iloc[self.annotation_index, -1]        
         html = self.make_html(annotation_text)
         text = HTML(html)
         
@@ -334,4 +335,19 @@ class Tortus:
                 redo_button.layout.visibility = 'hidden'
 
         redo_button.on_click(redo_button_clicked)
+
+
+def load_annotated_data(data_path):
+    """
+    data_path : path to .csv original df, path/data.csv --> where it may contain path/data_annotated.csv
+        
+    df_data : dataframe with labels, to pass to tortus ctor to continue annotations from a checkpoint    
+    """
+    arr = os.path.splitext(data_path)
+    ann_data_path = arr[0] + '_annotated' + arr[1]
+    df_data = None
+    if os.path.isfile(ann_data_path):
+        df_data = pd.read_csv(ann_data_path)
+    return df_data
+
 
