@@ -59,7 +59,7 @@ class Tortus:
 
 
     def __init__(self, df, text, num_records=10, id_column=None, annotations=None, random=True,
-                labels=['Positve', 'Negative', 'Neutral']):
+                labels=['Positve', 'Negative', 'Neutral'], display_confirm=False):
         '''Initializes the Tortus class.'''
         self.df = df
         self.text = text
@@ -74,6 +74,7 @@ class Tortus:
             self.annotations = annotations.copy()
         self.random = random
         self.labels = labels
+        self.display_confirm = display_confirm
         self.subset_df = self.create_subset_df()
 
 
@@ -250,11 +251,15 @@ class Tortus:
             skip_button.layout.border = 'None'
                 
             with output:
-                clear_output(True)
-                sentiment_buttons.layout.visibility = 'visible'
-                confirm_button.layout.visibility = 'visible'
-                redo_button.layout.visibility = 'visible'
-
+                clear_output(True)                
+                if self.display_confirm:
+                    sentiment_buttons.layout.visibility = 'visible'                
+                    confirm_button.layout.visibility = 'visible'
+                    redo_button.layout.visibility = 'visible'
+                
+            if not self.display_confirm:    
+                confirm_button_clicked(None)
+                
         for label in labels:
             label.on_click(label_buttons_clicked)
         
@@ -281,11 +286,15 @@ class Tortus:
             skip_button.disabled = True
                 
             with output:
-                clear_output(True)
-                sentiment_buttons.layout.visibility = 'visible'
-                confirm_button.layout.visibility = 'visible'
-                redo_button.layout.visibility = 'visible'
+                clear_output(True)              
+                if self.display_confirm:
+                    sentiment_buttons.layout.visibility = 'visible'
+                    confirm_button.layout.visibility = 'visible'
+                    redo_button.layout.visibility = 'visible'
             
+            if not self.display_confirm:    
+                confirm_button_clicked(None)
+                
         skip_button.on_click(skip_button_clicked)
 
 
@@ -337,14 +346,17 @@ class Tortus:
         redo_button.on_click(redo_button_clicked)
 
 
+def get_annotated_path(data_path):
+    arr = os.path.splitext(data_path)
+    return arr[0] + '_annotated' + arr[1]
+
 def load_annotated_data(data_path):
     """
     data_path : path to .csv original df, path/data.csv --> where it may contain path/data_annotated.csv
         
     df_data : dataframe with labels, to pass to tortus ctor to continue annotations from a checkpoint    
-    """
-    arr = os.path.splitext(data_path)
-    ann_data_path = arr[0] + '_annotated' + arr[1]
+    """    
+    ann_data_path = get_annotated_path(data_path)
     df_data = None
     if os.path.isfile(ann_data_path):
         df_data = pd.read_csv(ann_data_path)
