@@ -48,7 +48,9 @@ class Tortus:
         If None, ``annotations`` is created with columns ``id_column``, ``text``, ``label``, 
         ``annotated_at``, default is None
     :type annotation_df: pandas.core.frame.DataFrame, optional
-
+    
+    :param edit_annotations: Whether to edit existing annotations or start annotating new records     
+    :type edit_annotations: bool, optional - default is False
     :param random: Determines if records are loaded randomly or sequentially, default is True
     :type random: bool, optional
 
@@ -58,9 +60,11 @@ class Tortus:
     annotation_index = 0
 
 
-    def __init__(self, df, text, num_records=10, id_column=None, annotations=None, random=True,
+    def __init__(self, df, text, num_records=10, id_column=None, annotations=None,edit_annotations=False, random=True,
                 labels=['Positve', 'Negative', 'Neutral'], display_confirm=False):
-        '''Initializes the Tortus class.'''
+        '''Initializes the Tortus class.           
+        '''
+        
         self.df = df
         self.text = text
         self.num_records = num_records
@@ -72,7 +76,8 @@ class Tortus:
                 self.annotations = pd.DataFrame(columns=[id_column, text,'label','annotated_at'])
         else:
             self.annotations = annotations.copy()
-        self.random = random
+        self.edit_annotations = edit_annotations
+        self.random = False if self.edit_annotations else random
         self.labels = labels
         self.display_confirm = display_confirm
         self.subset_df = self.create_subset_df()
@@ -91,8 +96,11 @@ class Tortus:
             subset_df = self.df.copy()
 
         else:
-            leave_out = self.annotations[self.text].to_list()
-            subset_df = self.df[~self.df[self.text].isin(leave_out)]
+            already_annotated = self.annotations[self.text].to_list()
+            row_selection_to_annotate = self.df[self.text].isin(already_annotated)
+            if not self.edit_annotations:
+                row_selection_to_annotate = ~row_selection_to_annotate
+            subset_df = self.df[row_selection_to_annotate]
 
         if self.random:
             try:
@@ -260,11 +268,18 @@ class Tortus:
             button.style.button_color = '#36a849'
             record_id = self.create_record_id()
             row_annot = self.get_annotation_row_from_subset_iloc(self.annotation_index)            
-            idx = row_annot.name if row_annot is not None else len(self.annotations)
+            new_button_label = str(button.description).lower()
+            if row_annot is not None:                
+                idx = row_annot.name 
+                lbl = row_annot.label if skip else new_button_label
+            else: 
+                idx = len(self.annotations)
+                lbl = None if skip else new_button_label
+                
             self.annotations.loc[idx] = [
                 record_id[self.annotation_index],
                 self.subset_df[self.text].iloc[self.annotation_index],
-                None if skip else str(button.description).lower(),
+                lbl,
                 datetime.now().replace(microsecond=0)  
             ]
             
