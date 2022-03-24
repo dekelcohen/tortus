@@ -133,6 +133,11 @@ class Tortus:
         html = '<h4>' + text + '</h4>'
         return html
 
+    def get_annotation_row_from_subset_iloc(self,subset_iloc):
+        cur_row = self.subset_df.iloc[subset_iloc]
+        row_annot = self.annotations[self.annotations[self.id_column] == cur_row[self.id_column]]
+        return row_annot.iloc[0] if row_annot.shape[0] > 0 else None
+    
     def annotate(self):
         '''Displays texts to be annotated in a UI. Loads user inputted labels and timestamps into
             ``annotations`` dataframe.
@@ -152,13 +157,25 @@ class Tortus:
         annotation_text = self.subset_df.iloc[self.annotation_index, -1]        
         html = self.make_html(annotation_text)
         text = HTML(html)
-        
+# TODO:Debug:Remove
+#        print('annotation_index=',self.annotation_index)
+#        print('annotations',self.annotations[['index','NERed_par','label']])
+        # If there is an label for this row, color the label button (see button_color, below)
+        row_annot = self.get_annotation_row_from_subset_iloc(self.annotation_index)        
+        annot_label = None
+        if row_annot is not None:        
+            annot_label = row_annot.label
+            
         labels = []
         for label in self.labels:
             label_button = Button(
                 description=label,
                 layout=Layout(border='solid', flex='1 1 auto', width='auto'),
-                style=ButtonStyle(button_color='#eeeeee', font_weight='bold'))
+                style=ButtonStyle(button_color='#eeeeee', font_weight='bold'))                        
+            if label.lower() == annot_label:                
+                label_button.style.button_color = '#36a849'
+                
+                
             labels.append(label_button)
 
         label_buttons = HBox(labels)
@@ -172,6 +189,12 @@ class Tortus:
             description='Confirm selection',
             layout=Layout(border='solid', flex='1 1 auto', width='auto', grid_area='confirm'),
             style=ButtonStyle(button_color='#eeeeee', font_weight='bold'))
+        
+        prev_button = Button(
+            description='Prev',
+            layout=Layout(border='solid', flex='1 1 auto', width='auto', grid_area='prev'),
+            style=ButtonStyle(button_color='#eeeeee', font_weight='bold'))
+        
         
         redo_button = Button(
             description='Try again',
@@ -190,8 +213,8 @@ class Tortus:
         progress_bar.style.bar_color = '#36a849'
     
         header = HBox([logo, progress_bar])
-        sentiment_buttons = HBox([label_buttons, skip_button])
-        sentiment = labels + [skip_button]
+        sentiment_buttons = HBox([label_buttons, skip_button,prev_button])
+        sentiment = labels + [skip_button,prev_button]
         confirm = [confirm_button, redo_button]
 
         box_layout = Layout(
@@ -227,18 +250,21 @@ class Tortus:
         redo_button.layout.visibility = 'hidden'    
 
 
-        def label_buttons_clicked(button):
-            '''Response to button click of any sentiment buttons.
+        def label_or_skip_buttons_clicked(button,skip=False):
+            '''Response to button click of any label or skip buttons.
             
-            Appends ``annotations`` with label selection.
-            :param button: Label buttons click. 
+            Appends/Updates ``annotations`` with label selection.
+            :param button: Label/skip buttons click. 
+            :param skip: True if skip buttons click, false if any of the labels
             '''
             button.style.button_color = '#36a849'
             record_id = self.create_record_id()
-            self.annotations.loc[len(self.annotations)] = [
+            row_annot = self.get_annotation_row_from_subset_iloc(self.annotation_index)            
+            idx = row_annot.name if row_annot is not None else len(self.annotations)
+            self.annotations.loc[idx] = [
                 record_id[self.annotation_index],
                 self.subset_df[self.text].iloc[self.annotation_index],
-                str(button.description).lower(),
+                None if skip else str(button.description).lower(),
                 datetime.now().replace(microsecond=0)  
             ]
             
@@ -248,7 +274,8 @@ class Tortus:
                     label.layout.border = 'None'
 
             skip_button.disabled = True
-            skip_button.layout.border = 'None'
+            if not skip:
+                skip_button.layout.border = 'None'
                 
             with output:
                 clear_output(True)                
@@ -259,6 +286,9 @@ class Tortus:
                 
             if not self.display_confirm:    
                 confirm_button_clicked(None)
+                
+        def label_buttons_clicked(button):
+            label_or_skip_buttons_clicked(button,skip=False)
                 
         for label in labels:
             label.on_click(label_buttons_clicked)
@@ -271,53 +301,43 @@ class Tortus:
             
             :param button: Skip button click.
             '''
-            button.style.button_color = '#36a849'
-            record_id = self.create_record_id()
-            self.annotations.loc[len(self.annotations)] = [
-                record_id[self.annotation_index],
-                self.subset_df[self.text].iloc[self.annotation_index],
-                None,
-                datetime.now().replace(microsecond=0)  
-            ]
-            for label in labels:
-                label.disabled = True
-                label.layout.border = 'None'
-
-            skip_button.disabled = True
-                
-            with output:
-                clear_output(True)              
-                if self.display_confirm:
-                    sentiment_buttons.layout.visibility = 'visible'
-                    confirm_button.layout.visibility = 'visible'
-                    redo_button.layout.visibility = 'visible'
-            
-            if not self.display_confirm:    
-                confirm_button_clicked(None)
+            label_or_skip_buttons_clicked(button,skip=True)                        
                 
         skip_button.on_click(skip_button_clicked)
 
 
-        def confirm_button_clicked(button):
+        def move_clicked(delta):
             '''Response to click of the confirm button.
 
-            Advances the ``annotation_index`` to view the next item in the annotation tool.
+            Advances the ``annotation_index`` to view the next/prev item in the annotation tool.
                 Indicates the tool is done if ``annotation_index`` does not advance further.
+                
             
             :param button: Confirmation button click.
             '''
+            if delta == -1 and self.annotation_index == 0:
+                return
+            
             if self.annotation_index < len(self.subset_df) - 1:
-                self.annotation_index += 1
+                self.annotation_index += delta
                 clear_output(True)
                 self.annotate()
             else:
 
                 clear_output(True)
                 progress_bar.value = self.num_records
-                progress_bar.description = 'Complete'
+                progress_bar.description = 'Complete' if delta == 1 else 'Start'
                 display(header, output)    
 
+        def confirm_button_clicked(button):
+            move_clicked(1)
+        
         confirm_button.on_click(confirm_button_clicked)
+        
+        def prev_button_clicked(button):
+            move_clicked(-1)
+            
+        prev_button.on_click(prev_button_clicked)
 
 
         def redo_button_clicked(button):
