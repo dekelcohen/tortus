@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 from datetime import datetime
 import sysconfig
 from ipywidgets import Image, HTML, Button, IntProgress, \
@@ -59,8 +60,9 @@ class Tortus:
     '''
     annotation_index = 0
 
-
-    def __init__(self, df, text, num_records=10, id_column=None, annotations=None,edit_annotations=False, random=True,
+    MAX_BUTTONS_IN_ROW = 5
+    
+    def __init__(self, df, text, num_records=10, id_column=None, annotations=None,edit_annotations=False, get_html=None, random=False,
                 labels=['Positve', 'Negative', 'Neutral'], display_confirm=False):
         '''Initializes the Tortus class.           
         '''
@@ -77,6 +79,7 @@ class Tortus:
         else:
             self.annotations = annotations.copy()
         self.edit_annotations = edit_annotations
+        self.get_html = get_html if get_html else lambda row: row[self.text]            
         self.random = False if self.edit_annotations else random
         self.labels = labels
         self.display_confirm = display_confirm
@@ -102,16 +105,10 @@ class Tortus:
                 row_selection_to_annotate = ~row_selection_to_annotate
             subset_df = self.df[row_selection_to_annotate]
 
-        if self.random:
-            try:
-                subset_df = subset_df.sample(n=self.num_records)[[self.id_column, self.text]]
-            except:
-                subset_df = subset_df.sample(n=self.num_records)[[self.text]]
-        else:
-            try:
-                subset_df = subset_df[[self.id_column, self.text]][:self.num_records]
-            except:
-                subset_df = subset_df[[self.text]][:self.num_records]
+        if self.random:            
+            subset_df = subset_df.sample(n=self.num_records)            
+        else:            
+            subset_df = subset_df[:self.num_records]            
 
         return subset_df
 
@@ -129,7 +126,7 @@ class Tortus:
             record_id = self.subset_df[self.id_column].to_list()
         return record_id
 
-    def make_html(self, text):
+    def make_html(self, row):
         '''Changes text to html for annotation widget user interface.
 
         :param text: Text for conversion to html.
@@ -138,7 +135,7 @@ class Tortus:
         :returns: HTML snippet
         :rtype: str
         '''
-        html = '<h4>' + text + '</h4>'
+        html = '<h4>' + self.get_html(row) + '</h4>'
         return html
 
     def get_annotation_row_from_subset_iloc(self,subset_iloc):
@@ -161,9 +158,8 @@ class Tortus:
 
         rules = HTML(
             'Click on the label corresponding with the text below. Each selection requires \
-                confirmation before proceeding to the next item.')
-        annotation_text = self.subset_df.iloc[self.annotation_index, -1]        
-        html = self.make_html(annotation_text)
+                confirmation before proceeding to the next item.')        
+        html = self.make_html(self.subset_df.iloc[self.annotation_index])
         text = HTML(html)
 # TODO:Debug:Remove
 #        print('annotation_index=',self.annotation_index)
@@ -232,7 +228,8 @@ class Tortus:
             width='100%'
         )
 
-        box_sentiment = Box(sentiment, layout=box_layout)
+        btn_chunks = np.array_split(sentiment,len(sentiment) // self.MAX_BUTTONS_IN_ROW)
+        box_sentiment = VBox([HBox(list(chunk)) for chunk in btn_chunks])
         box_confirm = Box(confirm, layout=box_layout)
 
         all_buttons = VBox(
